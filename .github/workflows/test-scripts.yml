@@ -1,0 +1,21 @@
+name: Test Scripts
+
+on:
+  push:
+    branches: [main]
+    paths: ['scripts/**']
+  pull_request:
+    branches: [main]
+    paths: ['scripts/**']
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Run Resolve-ChangelogConflict tests
+        shell: pwsh
+        run: |
+          $result = & pwsh -File scripts/Resolve-ChangelogConflict.test.ps1
+          Write-Host $result
+          exit $LASTEXITCODE
