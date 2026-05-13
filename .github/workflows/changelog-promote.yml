@@ -46,10 +46,6 @@ jobs:
     permissions:
       contents: write
       pull-requests: read
-    concurrency:
-      group: changelog-promote-${{ github.repository }}
-      cancel-in-progress: false
-
     steps:
       # --- Token generation ---
       # App token (preferred): scoped, short-lived, auditable
