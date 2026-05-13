@@ -35,12 +35,6 @@ on:
 jobs:
   promote:
     runs-on: ubuntu-latest
-    permissions:
-      contents: write
-      pull-requests: read
-    concurrency:
-      group: changelog-promote-${{ github.repository }}
-      cancel-in-progress: false
     steps:
       - name: Debug
         run: echo "trigger_sha=${{ inputs.trigger_sha }} version=${{ inputs.version }}"
