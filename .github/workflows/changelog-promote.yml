@@ -6,6 +6,21 @@ on:
         description: 'The commit SHA that landed on main'
         required: true
         type: string
+      version:
+        description: 'Version string (defaults to YYYYMMDD.run_number)'
+        required: false
+        type: string
+        default: ''
+      scripts_repo:
+        description: 'Repository containing promotion scripts'
+        required: false
+        type: string
+        default: 'jeigenjjk/changelog-promote-pipeline'
+      scripts_ref:
+        description: 'Ref to checkout from scripts repo'
+        required: false
+        type: string
+        default: 'main'
     secrets:
       push_token:
         description: 'PAT for pushing to main and cross-repo checkout'
@@ -16,9 +31,16 @@ on:
       app_private_key:
         description: 'GitHub App private key (PEM format)'
         required: false
+
 jobs:
   promote:
     runs-on: ubuntu-latest
+    permissions:
+      contents: write
+      pull-requests: read
+    concurrency:
+      group: changelog-promote-${{ github.repository }}
+      cancel-in-progress: false
     steps:
       - name: Debug
-        run: echo "trigger_sha=${{ inputs.trigger_sha }}"
+        run: echo "trigger_sha=${{ inputs.trigger_sha }} version=${{ inputs.version }}"
