@@ -1,10 +1,5 @@
 # Reusable workflow: promote [Unreleased] entries and auto-resolve PR conflicts
 # Translated from AzDO pipeline (claude-changelog-promote, definition 1207)
-#
-# Auth modes (in priority order):
-#   1. GitHub App token: pass app_id + app_private_key secrets
-#   2. PAT/custom token: pass push_token secret
-#   3. GITHUB_TOKEN fallback: pass nothing (public repos with no branch protection only)
 name: Changelog Promote
 
 on:
@@ -31,13 +26,7 @@ on:
         default: 'main'
     secrets:
       push_token:
-        description: 'PAT for pushing to main and cross-repo checkout (falls back to GITHUB_TOKEN)'
-        required: false
-      app_id:
-        description: 'GitHub App ID for token generation (preferred over push_token)'
-        required: false
-      app_private_key:
-        description: 'GitHub App private key (PEM format)'
+        description: 'Token for pushing to main and cross-repo checkout (falls back to GITHUB_TOKEN)'
         required: false
 
 jobs:
@@ -51,47 +40,12 @@ jobs:
       cancel-in-progress: false
 
     steps:
-      # --- Token generation ---
-      # App token (preferred): scoped, short-lived, auditable
-      - name: Generate App token
-        if: ${{ secrets.app_id != '' && secrets.app_private_key != '' }}
-        id: app-token
-        uses: actions/create-github-app-token@v1
-        with:
-          app-id: ${{ secrets.app_id }}
-          private-key: ${{ secrets.app_private_key }}
-          owner: ${{ github.repository_owner }}
-
-      # Resolve the effective token: App token > push_token > GITHUB_TOKEN
-      - name: Resolve auth token
-        id: auth
-        shell: bash
-        run: |
-          if [ -n "$APP_TOKEN" ]; then
-            echo "token=$APP_TOKEN" >> "$GITHUB_OUTPUT"
-            echo "mode=app" >> "$GITHUB_OUTPUT"
-            echo "Auth mode: GitHub App"
-          elif [ -n "$PUSH_TOKEN" ]; then
-            echo "token=$PUSH_TOKEN" >> "$GITHUB_OUTPUT"
-            echo "mode=pat" >> "$GITHUB_OUTPUT"
-            echo "Auth mode: PAT/custom token"
-          else
-            echo "token=$DEFAULT_TOKEN" >> "$GITHUB_OUTPUT"
-            echo "mode=default" >> "$GITHUB_OUTPUT"
-            echo "Auth mode: GITHUB_TOKEN (default)"
-          fi
-        env:
-          APP_TOKEN: ${{ steps.app-token.outputs.token || '' }}
-          PUSH_TOKEN: ${{ secrets.push_token }}
-          DEFAULT_TOKEN: ${{ github.token }}
-
-      # --- Checkout ---
       - name: Checkout target repo
         uses: actions/checkout@v4
         with:
           ref: main
           fetch-depth: 0
-          token: ${{ steps.auth.outputs.token }}
+          token: ${{ secrets.push_token || github.token }}
 
       - name: Checkout promotion scripts
         uses: actions/checkout@v4
@@ -99,9 +53,8 @@ jobs:
           repository: ${{ inputs.scripts_repo }}
           ref: ${{ inputs.scripts_ref }}
           path: _promote-scripts
-          token: ${{ steps.auth.outputs.token }}
+          token: ${{ secrets.push_token || github.token }}
 
-      # --- Version ---
       - name: Compute version
         id: version
         shell: pwsh
@@ -113,7 +66,6 @@ jobs:
           Write-Host "Version: $v"
           "version=$v" >> $env:GITHUB_OUTPUT
 
-      # --- Guard ---
       - name: Guard - skip if not changelog-related
         id: guard
         shell: pwsh
@@ -139,7 +91,6 @@ jobs:
           Write-Host "Guard passed - proceeding with promotion"
           "skip=false" >> $env:GITHUB_OUTPUT
 
-      # --- Promote ---
       - name: Promote changelog
         if: steps.guard.outputs.skip != 'true'
         id: promote
@@ -148,7 +99,6 @@ jobs:
           $ErrorActionPreference = "Stop"
           $version = '${{ steps.version.outputs.version }}'
           $sha = '${{ inputs.trigger_sha }}'
-          $authMode = '${{ steps.auth.outputs.mode }}'
 
           git pull origin main
 
@@ -184,16 +134,9 @@ jobs:
             exit 0
           }
 
-          # Configure git identity based on auth mode
-          if ($authMode -eq 'app') {
-            # App token: use the App's bot identity
-            git config --local user.email "changelog-promote-bot[bot]@users.noreply.github.com"
-            git config --local user.name "changelog-promote-bot[bot]"
-          } else {
-            # PAT or GITHUB_TOKEN: use github-actions bot
-            git config --local user.email "41898282+github-actions[bot]@users.noreply.github.com"
-            git config --local user.name "github-actions[bot]"
-          }
+          # Configure git identity
+          git config --local user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git config --local user.name "github-actions[bot]"
 
           git add CHANGELOG.md
           git commit -m "docs: promote changelog [Unreleased] to [$version] [skip ci]"
@@ -203,24 +146,16 @@ jobs:
           Write-Host "Promotion complete: [$version]"
           "promoted=true" >> $env:GITHUB_OUTPUT
 
-      # --- Auto-resolve PR conflicts ---
       - name: Auto-resolve PR conflicts
         if: steps.guard.outputs.skip != 'true'
         shell: pwsh
         env:
-          GH_TOKEN: ${{ steps.auth.outputs.token }}
+          GH_TOKEN: ${{ secrets.push_token || github.token }}
         run: |
           $ErrorActionPreference = "Stop"
-          $authMode = '${{ steps.auth.outputs.mode }}'
 
-          # Git identity matches promote step
-          if ($authMode -eq 'app') {
-            git config --local user.email "changelog-promote-bot[bot]@users.noreply.github.com"
-            git config --local user.name "changelog-promote-bot[bot]"
-          } else {
-            git config --local user.email "41898282+github-actions[bot]@users.noreply.github.com"
-            git config --local user.name "github-actions[bot]"
-          }
+          git config --local user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git config --local user.name "github-actions[bot]"
 
           git fetch origin main
           git checkout main
