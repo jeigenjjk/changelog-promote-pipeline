@@ -6,6 +6,16 @@ on:
         description: 'The commit SHA that landed on main'
         required: true
         type: string
+    secrets:
+      push_token:
+        description: 'PAT for pushing to main and cross-repo checkout'
+        required: false
+      app_id:
+        description: 'GitHub App ID for token generation'
+        required: false
+      app_private_key:
+        description: 'GitHub App private key (PEM format)'
+        required: false
 jobs:
   promote:
     runs-on: ubuntu-latest
