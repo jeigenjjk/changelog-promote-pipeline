@@ -30,23 +30,25 @@ jobs:
       pull-requests: read
 ```
 
-## Test Results
+## Test Results (2026-05-12/13)
 
-| Test | Description | Result |
-|------|-------------|--------|
-| T1 | PR merge with CHANGELOG entry | pending |
-| T2 | PR merge without CHANGELOG change | pending |
-| T3 | Promotion commit no re-trigger | pending |
-| T4 | Auto-resolve PR conflict | pending |
-| T5 | Multi-file conflict skipped | pending |
-| T6 | Version format YYYYMMDD.N | pending |
-| T7 | Branch protection bypass | pending |
-| T8 | Concurrent merge queuing | pending |
-| T9 | Script tests on ubuntu | pending |
-| T10 | Custom version input | pending |
-| T11 | Cross-repo workflow_call | pending |
-| T12 | GITHUB_TOKEN fallback | pending |
-| T13 | Empty unreleased skip | pending |
-| T14 | Multiple categories | pending |
-| T15 | Version monotonicity | pending |
-| T16 | [skip ci] scope | pending |
+**16/16 PASS**
+
+| Test | Description | Target | Result |
+|------|-------------|--------|--------|
+| T1 | PR merge with CHANGELOG entry | target-a | PASS |
+| T2 | PR merge without CHANGELOG change | target-a | PASS |
+| T3 | Promotion commit no re-trigger | target-a | PASS |
+| T4 | Auto-resolve PR conflict | target-a | PASS |
+| T5 | Multi-file conflict skipped | target-a | PASS |
+| T6 | Version format YYYYMMDD.N | target-a | PASS |
+| T7 | Branch protection bypass | target-b | PASS |
+| T8 | Concurrent merge queuing | target-b | PASS |
+| T9 | Script tests on ubuntu | pipeline | PASS |
+| T10 | Custom version input | target-a | PASS |
+| T11 | Cross-repo workflow_call | target-b | PASS |
+| T12 | GITHUB_TOKEN fallback | target-a | PASS |
+| T13 | Empty unreleased skip | target-a | PASS |
+| T14 | Multiple categories | target-a | PASS |
+| T15 | Version monotonicity | target-b | PASS |
+| T16 | [skip ci] scope | target-b | PASS |
