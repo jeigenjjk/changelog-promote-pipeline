@@ -21,5 +21,8 @@ jobs:
       contents: write
       pull-requests: read
     steps:
+      - name: Check secrets
+        if: ${{ secrets.app_id != '' && secrets.app_private_key != '' }}
+        run: echo "Secrets present"
       - name: Debug
         run: echo "trigger_sha=${{ inputs.trigger_sha }}"
