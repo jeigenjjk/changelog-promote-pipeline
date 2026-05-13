@@ -1,0 +1,4 @@
+# Credentials from manifest flow — never commit
+.credentials.json
+.credentials-raw.json
+.private-key.pem

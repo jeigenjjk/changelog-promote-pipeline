@@ -1,0 +1,17 @@
+{
+  "name": "changelog-promote-bot",
+  "description": "Pushes changelog promotion commits to protected branches and resolves CHANGELOG.md merge conflicts on open PRs.",
+  "url": "https://github.com/jeigenjjk/changelog-promote-pipeline",
+  "hook_attributes": {
+    "url": "https://example.com/no-op",
+    "active": false
+  },
+  "redirect_url": "http://localhost:9999/callback",
+  "public": false,
+  "default_permissions": {
+    "contents": "write",
+    "pull_requests": "write",
+    "metadata": "read"
+  },
+  "default_events": []
+}
