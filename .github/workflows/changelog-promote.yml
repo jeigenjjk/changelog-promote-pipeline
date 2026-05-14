@@ -2,13 +2,16 @@
 # Translated from AzDO pipeline (claude-changelog-promote, definition 1207)
 #
 # Auth modes (in priority order):
-#   1. GitHub App token: pass app_id + app_private_key secrets
-#   2. PAT/custom token: pass push_token secret
-#   3. GITHUB_TOKEN fallback: pass nothing (public repos with no branch protection only)
+#   1. GitHub App token: pass app_id + app_private_key secrets (recommended)
+#   2. GITHUB_TOKEN fallback: pass nothing (public repos with no branch protection only)
 #
 # Caller requirements:
 #   - permissions: { contents: write, pull-requests: read } on the calling job
 #   - secrets.* cannot be used in step `if` conditions (GitHub validation bug)
+#
+# Loop prevention: Uses [skip changelog] (custom marker) instead of [skip ci].
+# [skip ci] is a GitHub/AzDO-native standard that suppresses ALL workflows.
+# [skip changelog] only affects the changelog caller's `if:` condition.
 name: Changelog Promote
 
 on:
@@ -34,11 +37,8 @@ on:
         type: string
         default: 'main'
     secrets:
-      push_token:
-        description: 'PAT for pushing to main and cross-repo checkout (falls back to GITHUB_TOKEN)'
-        required: false
       app_id:
-        description: 'GitHub App ID for token generation (preferred over push_token)'
+        description: 'GitHub App ID for token generation'
         required: false
       app_private_key:
         description: 'GitHub App private key (PEM format)'
@@ -63,18 +63,12 @@ jobs:
         run: |
           if [ -n "$APP_ID" ] && [ -n "$APP_KEY" ]; then
             echo "has_app=true" >> "$GITHUB_OUTPUT"
-            echo "has_pat=false" >> "$GITHUB_OUTPUT"
-          elif [ -n "$PUSH_TOKEN" ]; then
-            echo "has_app=false" >> "$GITHUB_OUTPUT"
-            echo "has_pat=true" >> "$GITHUB_OUTPUT"
           else
             echo "has_app=false" >> "$GITHUB_OUTPUT"
-            echo "has_pat=false" >> "$GITHUB_OUTPUT"
           fi
         env:
           APP_ID: ${{ secrets.app_id }}
           APP_KEY: ${{ secrets.app_private_key }}
-          PUSH_TOKEN: ${{ secrets.push_token }}
 
       # App token (preferred): scoped, short-lived, auditable
       - name: Generate App token
@@ -95,10 +89,6 @@ jobs:
             echo "token=$APP_TOKEN" >> "$GITHUB_OUTPUT"
             echo "mode=app" >> "$GITHUB_OUTPUT"
             echo "Auth mode: GitHub App"
-          elif [ "$HAS_PAT" = "true" ]; then
-            echo "token=$PUSH_TOKEN" >> "$GITHUB_OUTPUT"
-            echo "mode=pat" >> "$GITHUB_OUTPUT"
-            echo "Auth mode: PAT/custom token"
           else
             echo "token=$DEFAULT_TOKEN" >> "$GITHUB_OUTPUT"
             echo "mode=default" >> "$GITHUB_OUTPUT"
@@ -106,9 +96,7 @@ jobs:
           fi
         env:
           HAS_APP: ${{ steps.detect-auth.outputs.has_app }}
-          HAS_PAT: ${{ steps.detect-auth.outputs.has_pat }}
           APP_TOKEN: ${{ steps.app-token.outputs.token }}
-          PUSH_TOKEN: ${{ secrets.push_token }}
           DEFAULT_TOKEN: ${{ github.token }}
 
       # --- Checkout ---
@@ -222,7 +210,7 @@ jobs:
           }
 
           git add CHANGELOG.md
-          git commit -m "docs: promote changelog [Unreleased] to [$version] [skip ci]"
+          git commit -m "docs: promote changelog [Unreleased] to [$version] [skip changelog]"
           git push origin main
           if ($LASTEXITCODE -ne 0) { Write-Error "Push to main failed. Check token permissions." }
 
@@ -314,7 +302,7 @@ jobs:
                   continue
                 }
 
-                git commit -m "chore: auto-resolve CHANGELOG.md merge conflict [skip ci]"
+                git commit -m "chore: auto-resolve CHANGELOG.md merge conflict [skip changelog]"
                 git push origin "HEAD:refs/heads/$srcBranch"
                 if ($LASTEXITCODE -ne 0) {
                   Write-Host "  Push failed for PR #$prNum"
