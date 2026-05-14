@@ -1,13 +1,11 @@
 # Reusable workflow: promote [Unreleased] entries and auto-resolve PR conflicts
 # Translated from AzDO pipeline (claude-changelog-promote, definition 1207)
 #
-# Auth modes (in priority order):
-#   1. GitHub App token: pass app_id + app_private_key secrets (recommended)
-#   2. GITHUB_TOKEN fallback: pass nothing (public repos with no branch protection only)
+# Auth: GitHub App token (required). Callers must pass app_id + app_private_key.
+# The App token handles cross-repo script checkout and branch protection bypass.
 #
 # Caller requirements:
 #   - permissions: { contents: write, pull-requests: read } on the calling job
-#   - secrets.* cannot be used in step `if` conditions (GitHub validation bug)
 #
 # Loop prevention: Uses [skip changelog] (custom marker) instead of [skip ci].
 # [skip ci] is a GitHub/AzDO-native standard that suppresses ALL workflows.
@@ -39,10 +37,10 @@ on:
     secrets:
       app_id:
         description: 'GitHub App ID for token generation'
-        required: false
+        required: true
       app_private_key:
         description: 'GitHub App private key (PEM format)'
-        required: false
+        required: true
 
 jobs:
   promote:
@@ -55,24 +53,20 @@ jobs:
       cancel-in-progress: false
 
     steps:
-      # --- Token generation ---
-      # Detect which auth mode to use (secrets.* cannot be used in step if conditions)
-      - name: Detect auth mode
-        id: detect-auth
+      # --- Token generation (GitHub App, required) ---
+      - name: Validate App credentials
         shell: bash
         run: |
-          if [ -n "$APP_ID" ] && [ -n "$APP_KEY" ]; then
-            echo "has_app=true" >> "$GITHUB_OUTPUT"
-          else
-            echo "has_app=false" >> "$GITHUB_OUTPUT"
+          if [ -z "$APP_ID" ] || [ -z "$APP_KEY" ]; then
+            echo "::error::GitHub App credentials not configured. Set CHANGELOG_APP_ID and CHANGELOG_APP_PRIVATE_KEY secrets."
+            exit 1
           fi
+          echo "App credentials present"
         env:
           APP_ID: ${{ secrets.app_id }}
           APP_KEY: ${{ secrets.app_private_key }}
 
-      # App token (preferred): scoped, short-lived, auditable
       - name: Generate App token
-        if: steps.detect-auth.outputs.has_app == 'true'
         id: app-token
         uses: actions/create-github-app-token@v1
         with:
@@ -80,32 +74,13 @@ jobs:
           private-key: ${{ secrets.app_private_key }}
           owner: ${{ github.repository_owner }}
 
-      # Resolve the effective token: App token > push_token > GITHUB_TOKEN
-      - name: Resolve auth token
-        id: auth
-        shell: bash
-        run: |
-          if [ "$HAS_APP" = "true" ] && [ -n "$APP_TOKEN" ]; then
-            echo "token=$APP_TOKEN" >> "$GITHUB_OUTPUT"
-            echo "mode=app" >> "$GITHUB_OUTPUT"
-            echo "Auth mode: GitHub App"
-          else
-            echo "token=$DEFAULT_TOKEN" >> "$GITHUB_OUTPUT"
-            echo "mode=default" >> "$GITHUB_OUTPUT"
-            echo "Auth mode: GITHUB_TOKEN (default)"
-          fi
-        env:
-          HAS_APP: ${{ steps.detect-auth.outputs.has_app }}
-          APP_TOKEN: ${{ steps.app-token.outputs.token }}
-          DEFAULT_TOKEN: ${{ github.token }}
-
       # --- Checkout ---
       - name: Checkout target repo
         uses: actions/checkout@v4
         with:
           ref: main
           fetch-depth: 0
-          token: ${{ steps.auth.outputs.token }}
+          token: ${{ steps.app-token.outputs.token }}
 
       - name: Checkout promotion scripts
         uses: actions/checkout@v4
@@ -113,7 +88,7 @@ jobs:
           repository: ${{ inputs.scripts_repo }}
           ref: ${{ inputs.scripts_ref }}
           path: _promote-scripts
-          token: ${{ steps.auth.outputs.token }}
+          token: ${{ steps.app-token.outputs.token }}
 
       # --- Version ---
       - name: Compute version
@@ -162,7 +137,6 @@ jobs:
           $ErrorActionPreference = "Stop"
           $version = '${{ steps.version.outputs.version }}'
           $sha = '${{ inputs.trigger_sha }}'
-          $authMode = '${{ steps.auth.outputs.mode }}'
 
           git pull origin main
 
@@ -198,16 +172,9 @@ jobs:
             exit 0
           }
 
-          # Configure git identity based on auth mode
-          if ($authMode -eq 'app') {
-            # App token: use the App's bot identity
-            git config --local user.email "changelog-promote-bot[bot]@users.noreply.github.com"
-            git config --local user.name "changelog-promote-bot[bot]"
-          } else {
-            # PAT or GITHUB_TOKEN: use github-actions bot
-            git config --local user.email "41898282+github-actions[bot]@users.noreply.github.com"
-            git config --local user.name "github-actions[bot]"
-          }
+          # Git identity: App bot
+          git config --local user.email "changelog-promote-bot[bot]@users.noreply.github.com"
+          git config --local user.name "changelog-promote-bot[bot]"
 
           git add CHANGELOG.md
           git commit -m "docs: promote changelog [Unreleased] to [$version] [skip changelog]"
@@ -222,19 +189,13 @@ jobs:
         if: steps.guard.outputs.skip != 'true'
         shell: pwsh
         env:
-          GH_TOKEN: ${{ steps.auth.outputs.token }}
+          GH_TOKEN: ${{ steps.app-token.outputs.token }}
         run: |
           $ErrorActionPreference = "Stop"
-          $authMode = '${{ steps.auth.outputs.mode }}'
 
-          # Git identity matches promote step
-          if ($authMode -eq 'app') {
-            git config --local user.email "changelog-promote-bot[bot]@users.noreply.github.com"
-            git config --local user.name "changelog-promote-bot[bot]"
-          } else {
-            git config --local user.email "41898282+github-actions[bot]@users.noreply.github.com"
-            git config --local user.name "github-actions[bot]"
-          }
+          # Git identity: App bot
+          git config --local user.email "changelog-promote-bot[bot]@users.noreply.github.com"
+          git config --local user.name "changelog-promote-bot[bot]"
 
           git fetch origin main
           git checkout main
